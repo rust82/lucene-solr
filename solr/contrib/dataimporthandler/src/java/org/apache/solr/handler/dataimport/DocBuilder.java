@@ -237,6 +237,11 @@ public class DocBuilder {
           }
         }
         statusMessages.remove(DataImporter.MSG.TOTAL_DOC_PROCESSED);
+        epw.close();
+        if(epw.getDatasource()!=null) {
+          epw.getDatasource().close();
+        }
+        closeEntityProcessorWrappers(epw.getChildren());
       }
 
       if (stop.get()) {
