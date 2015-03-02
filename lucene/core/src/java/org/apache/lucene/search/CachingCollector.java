@@ -17,14 +17,14 @@ package org.apache.lucene.search;
  * limitations under the License.
  */
 
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.util.ArrayUtil;
-import org.apache.lucene.util.RamUsageEstimator;
-
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+
+import org.apache.lucene.index.LeafReaderContext;
+import org.apache.lucene.util.ArrayUtil;
+import org.apache.lucene.util.RamUsageEstimator;
 
 /**
  * Caches all docs, and optionally also scores, coming from
@@ -78,6 +78,7 @@ public abstract class CachingCollector extends FilterCollector {
 
     @Override
     public long cost() { return 1; }
+
   }
 
   private static class NoScoreCachingCollector extends CachingCollector {
@@ -296,6 +297,11 @@ public abstract class CachingCollector extends FilterCollector {
 
       @Override
       public void collect(int doc) {}
+
+      @Override
+      public boolean needsScores() {
+        return true;
+      }
 
     };
     return create(other, cacheScores, maxRAMMB);

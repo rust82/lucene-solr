@@ -64,7 +64,7 @@ public abstract class QueryParserBase extends QueryBuilder implements CommonQuer
   Operator operator = OR_OPERATOR;
 
   boolean lowercaseExpandedTerms = true;
-  MultiTermQuery.RewriteMethod multiTermRewriteMethod = MultiTermQuery.CONSTANT_SCORE_FILTER_REWRITE;
+  MultiTermQuery.RewriteMethod multiTermRewriteMethod = MultiTermQuery.CONSTANT_SCORE_REWRITE;
   boolean allowLeadingWildcard = false;
 
   protected String field;
@@ -236,7 +236,7 @@ public abstract class QueryParserBase extends QueryBuilder implements CommonQuer
    * Sets the boolean operator of the QueryParser.
    * In default mode (<code>OR_OPERATOR</code>) terms without any modifiers
    * are considered optional: for example <code>capital of Hungary</code> is equal to
-   * <code>capital OR of OR Hungary</code>.<br/>
+   * <code>capital OR of OR Hungary</code>.<br>
    * In <code>AND_OPERATOR</code> mode terms are considered to be in conjunction: the
    * above mentioned query is parsed as <code>capital AND of AND Hungary</code>
    */
@@ -272,7 +272,7 @@ public abstract class QueryParserBase extends QueryBuilder implements CommonQuer
   }
 
   /**
-   * By default QueryParser uses {@link org.apache.lucene.search.MultiTermQuery#CONSTANT_SCORE_FILTER_REWRITE}
+   * By default QueryParser uses {@link org.apache.lucene.search.MultiTermQuery#CONSTANT_SCORE_REWRITE}
    * when creating a {@link PrefixQuery}, {@link WildcardQuery} or {@link TermRangeQuery}. This implementation is generally preferable because it
    * a) Runs faster b) Does not have the scarcity of terms unduly influence score
    * c) avoids any {@link TooManyClauses} exception.

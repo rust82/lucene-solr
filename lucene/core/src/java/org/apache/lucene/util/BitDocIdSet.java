@@ -61,12 +61,6 @@ public class BitDocIdSet extends DocIdSet {
     return set;
   }
 
-  /** This DocIdSet implementation is cacheable. */
-  @Override
-  public boolean isCacheable() {
-    return true;
-  }
-
   @Override
   public long ramBytesUsed() {
     return BASE_RAM_BYTES_USED + set.ramBytesUsed();
@@ -143,28 +137,6 @@ public class BitDocIdSet extends DocIdSet {
         sparseSet = new SparseFixedBitSet(maxDoc);
       }
       sparseSet.or(it);
-    }
-
-    /**
-     * Removes from this builder documents that are not contained in <code>it</code>.
-     */
-    public void and(DocIdSetIterator it) throws IOException {
-      if (denseSet != null) {
-        denseSet.and(it);
-      } else if (sparseSet != null) {
-        sparseSet.and(it);
-      }
-    }
-
-    /**
-     * Removes from this builder documents that are contained in <code>it</code>.
-     */
-    public void andNot(DocIdSetIterator it) throws IOException {
-      if (denseSet != null) {
-        denseSet.andNot(it);
-      } else if (sparseSet != null) {
-        sparseSet.andNot(it);
-      }
     }
 
     /**

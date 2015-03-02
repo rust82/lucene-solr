@@ -302,6 +302,11 @@ public class TestTermAutomatonQuery extends LuceneTestCase {
         public void collect(int docID) throws IOException {
           assertEquals(3, scorer.freq());
         }
+        
+        @Override
+        public boolean needsScores() {
+          return true;
+        }
       });
 
     w.close();
@@ -570,15 +575,19 @@ public class TestTermAutomatonQuery extends LuceneTestCase {
         System.out.println(q.toDot());
       }
       
-      Filter filter;
+      Query q1 = q;
+      Query q2 = bq;
       if (random().nextInt(5) == 1) {
-        filter = new RandomFilter(random().nextLong(), random().nextFloat());
-      } else {
-        filter = null;
+        if (VERBOSE) {
+          System.out.println("  use random filter");
+        }
+        RandomFilter filter = new RandomFilter(random().nextLong(), random().nextFloat());
+        q1 = new FilteredQuery(q1, filter);
+        q2 = new FilteredQuery(q2, filter);
       }
 
-      TopDocs hits1 = s.search(q, filter, numDocs);
-      TopDocs hits2 = s.search(bq, filter, numDocs);
+      TopDocs hits1 = s.search(q1, numDocs);
+      TopDocs hits2 = s.search(q2, numDocs);
       Set<String> hits1Docs = toDocIDs(s, hits1);
       Set<String> hits2Docs = toDocIDs(s, hits2);
 
@@ -637,6 +646,11 @@ public class TestTermAutomatonQuery extends LuceneTestCase {
       }
 
       return new BitDocIdSet(bits);
+    }
+
+    @Override
+    public String toString(String field) {
+      return "RandomFilter(seed=" + seed + ",density=" + density + ")";
     }
   }
 }

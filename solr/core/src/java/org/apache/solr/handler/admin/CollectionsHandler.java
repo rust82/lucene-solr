@@ -1023,6 +1023,7 @@ public class CollectionsHandler extends RequestHandlerBase {
     props.put(Overseer.QUEUE_OPERATION, CollectionAction.ADDREPLICA.toString());
     copyIfNotNull(req.getParams(), props, COLLECTION_PROP, "node", SHARD_ID_PROP, ShardParams._ROUTE_,
         CoreAdminParams.NAME, CoreAdminParams.INSTANCE_DIR, CoreAdminParams.DATA_DIR, ASYNC);
+    copyPropertiesIfNotNull(req.getParams(), props);
     ZkNodeProps m = new ZkNodeProps(props);
     handleResponse(CollectionAction.ADDREPLICA.toString(), m, rsp);
   }
@@ -1051,9 +1052,16 @@ public class CollectionsHandler extends RequestHandlerBase {
    * @throws InterruptedException connection interrupted
    */
   private void handleListAction(SolrQueryRequest req, SolrQueryResponse rsp) throws KeeperException, InterruptedException {
-    Map<String, Object> props = ZkNodeProps.makeMap(
-        Overseer.QUEUE_OPERATION, CollectionAction.LIST.toString().toLowerCase(Locale.ROOT));
-    handleResponse(CollectionAction.LIST.toString(), new ZkNodeProps(props), rsp);
+    NamedList<Object> results = new NamedList<>();
+    Set<String> collections = coreContainer.getZkController().getZkStateReader().getClusterState().getCollections();
+    List<String> collectionList = new ArrayList<>();
+    for (String collection : collections) {
+      collectionList.add(collection);
+    }
+    results.add("collections", collectionList);
+    SolrResponse response = new OverseerSolrResponse(results);
+
+    rsp.getValues().addAll(response.getResponse());
   }
 
 

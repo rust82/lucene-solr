@@ -24,8 +24,10 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
@@ -41,6 +43,8 @@ import org.apache.solr.common.cloud.ClusterState;
 import org.apache.solr.common.cloud.DocCollection;
 import org.apache.solr.common.cloud.Replica;
 import org.apache.solr.common.cloud.Slice;
+import org.apache.solr.common.cloud.ZkCoreNodeProps;
+import org.apache.solr.common.cloud.ZkStateReader;
 import org.apache.solr.handler.admin.CollectionsHandler;
 import org.apache.solr.util.SimplePostTool;
 import org.slf4j.Logger;
@@ -51,8 +55,8 @@ import org.slf4j.LoggerFactory;
  */
 public class JarRepository {
   public static Logger log = LoggerFactory.getLogger(JarRepository.class);
-
   static final Random RANDOM;
+
   static {
     // We try to make things reproducible in the context of our tests by initializing the random instance
     // based on the current seed
@@ -63,37 +67,48 @@ public class JarRepository {
       RANDOM = new Random(seed.hashCode());
     }
   }
-  
+
   private final CoreContainer coreContainer;
-  
-  private Map<String,JarContent> jars = new ConcurrentHashMap<>();
-  
+  private Map<String, JarContent> jars = new ConcurrentHashMap<>();
+
   public JarRepository(CoreContainer coreContainer) {
     this.coreContainer = coreContainer;
   }
-  
+
   /**
    * Returns the contents of a jar and increments a reference count. Please return the same object to decerease the refcount
-   * 
-   * @param key
-   *          it is a combination of blobname and version like blobName/version
+   *
+   * @param key it is a combination of blobname and version like blobName/version
    * @return The reference of a jar
    */
   public JarContentRef getJarIncRef(String key) throws IOException {
     JarContent jar = jars.get(key);
     if (jar == null) {
       if (this.coreContainer.isZooKeeperAware()) {
-        ClusterState cs = this.coreContainer.getZkController().getZkStateReader().getClusterState();
+        ZkStateReader zkStateReader = this.coreContainer.getZkController().getZkStateReader();
+        ClusterState cs = zkStateReader.getClusterState();
         DocCollection coll = cs.getCollectionOrNull(CollectionsHandler.SYSTEM_COLL);
         if (coll == null) throw new SolrException(SERVICE_UNAVAILABLE, ".system collection not available");
         ArrayList<Slice> slices = new ArrayList<>(coll.getActiveSlices());
-        if (slices.isEmpty()) throw new SolrException(SERVICE_UNAVAILABLE, ".no active slices for .system collection");
+        if (slices.isEmpty()) throw new SolrException(SERVICE_UNAVAILABLE, "No active slices for .system collection");
         Collections.shuffle(slices, RANDOM); //do load balancing
-        Slice slice = slices.get(0) ;
-        Replica replica = slice.getReplicas().iterator().next();
-        if (replica == null) throw new SolrException(SERVICE_UNAVAILABLE, ".no active replica available for .system collection");
+
+        Replica replica = null;
+        for (Slice slice : slices)  {
+          List<Replica> replicas = new ArrayList<>(slice.getReplicasMap().values());
+          Collections.shuffle(replicas, RANDOM);
+          for (Replica r : replicas) {
+            if (ZkStateReader.ACTIVE.equals(r.getStr(ZkStateReader.STATE_PROP))) {
+              replica = r;
+              break;
+            }
+          }
+        }
+        if (replica == null) {
+          throw new SolrException(SERVICE_UNAVAILABLE, ".no active replica available for .system collection");
+        }
         String url = replica.getStr(BASE_URL_PROP) + "/.system/blob/" + key + "?wt=filestream";
-        
+
         HttpClient httpClient = coreContainer.getUpdateShardHandler().getHttpClient();
         HttpGet httpGet = new HttpGet(url);
         ByteBuffer b;
@@ -109,27 +124,24 @@ public class JarRepository {
         }
         jars.put(key, jar = new JarContent(key, b));
       } else {
-        
         throw new SolrException(SolrException.ErrorCode.SERVER_ERROR, "Jar loading is not supported in non-cloud mode");
         // todo
-        
       }
-      
+
     }
-    
+
     JarContentRef ref = new JarContentRef(jar);
     synchronized (jar.references) {
       jar.references.add(ref);
     }
     return ref;
-    
+
   }
-  
+
   /**
    * This is to decrement a ref count
-   * 
-   * @param ref
-   *          The reference that is already there. Doing multiple calls with same ref will not matter
+   *
+   * @param ref The reference that is already there. Doing multiple calls with same ref will not matter
    */
   public void decrementJarRefCount(JarContentRef ref) {
     if (ref == null) return;
@@ -141,21 +153,21 @@ public class JarRepository {
         jars.remove(ref.jar.key);
       }
     }
-    
+
   }
-  
+
   public static class JarContent {
     private final String key;
     // TODO move this off-heap
     private final ByteBuffer buffer;
     // ref counting mechanism
     private final Set<JarContentRef> references = new HashSet<>();
-    
+
     public JarContent(String key, ByteBuffer buffer) {
       this.key = key;
       this.buffer = buffer;
     }
-    
+
     public ByteBuffer getFileContent(String entryName) throws IOException {
       ByteArrayInputStream zipContents = new ByteArrayInputStream(buffer.array(), buffer.arrayOffset(), buffer.limit());
       ZipInputStream zis = new ZipInputStream(zipContents);
@@ -178,15 +190,15 @@ public class JarRepository {
       }
       return null;
     }
-    
+
   }
-  
+
   public static class JarContentRef {
     public final JarContent jar;
-    
+
     private JarContentRef(JarContent jar) {
       this.jar = jar;
     }
   }
-  
+
 }

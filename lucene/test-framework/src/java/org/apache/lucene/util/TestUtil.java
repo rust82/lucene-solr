@@ -26,7 +26,6 @@ import java.io.PrintStream;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.CharBuffer;
-import java.nio.file.FileSystem;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -45,6 +44,9 @@ import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
+
+import com.carrotsearch.randomizedtesting.generators.RandomInts;
+import com.carrotsearch.randomizedtesting.generators.RandomPicks;
 
 import org.apache.lucene.codecs.Codec;
 import org.apache.lucene.codecs.DocValuesFormat;
@@ -71,8 +73,8 @@ import org.apache.lucene.index.CheckIndex;
 import org.apache.lucene.index.ConcurrentMergeScheduler;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.DocValuesType;
-import org.apache.lucene.index.DocsAndPositionsEnum;
-import org.apache.lucene.index.DocsEnum;
+import org.apache.lucene.index.IndexFileNames;
+import org.apache.lucene.index.PostingsEnum;
 import org.apache.lucene.index.FilterLeafReader;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
@@ -89,21 +91,17 @@ import org.apache.lucene.index.SlowCodecReaderWrapper;
 import org.apache.lucene.index.Terms;
 import org.apache.lucene.index.TermsEnum;
 import org.apache.lucene.index.TieredMergePolicy;
-import org.apache.lucene.mockfile.FilterFileSystem;
-import org.apache.lucene.mockfile.WindowsFS;
 import org.apache.lucene.search.FieldDoc;
-import org.apache.lucene.search.FilteredQuery.FilterStrategy;
 import org.apache.lucene.search.FilteredQuery;
+import org.apache.lucene.search.FilteredQuery.FilterStrategy;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.store.Directory;
-import org.apache.lucene.store.FSDirectory;
-import org.apache.lucene.store.FilterDirectory;
+import org.apache.lucene.store.IOContext;
 import org.apache.lucene.store.NoLockFactory;
+import org.apache.lucene.store.RAMDirectory;
 import org.junit.Assert;
 
-import com.carrotsearch.randomizedtesting.generators.RandomInts;
-import com.carrotsearch.randomizedtesting.generators.RandomPicks;
 
 /**
  * General utility methods for Lucene unit tests. 
@@ -997,7 +995,7 @@ public final class TestUtil {
   // Returns a DocsEnum, but randomly sometimes uses a
   // DocsAndFreqsEnum, DocsAndPositionsEnum.  Returns null
   // if field/term doesn't exist:
-  public static DocsEnum docs(Random random, IndexReader r, String field, BytesRef term, Bits liveDocs, DocsEnum reuse, int flags) throws IOException {
+  public static PostingsEnum docs(Random random, IndexReader r, String field, BytesRef term, Bits liveDocs, PostingsEnum reuse, int flags) throws IOException {
     final Terms terms = MultiFields.getTerms(r, field);
     if (terms == null) {
       return null;
@@ -1011,25 +1009,24 @@ public final class TestUtil {
 
   // Returns a DocsEnum from a positioned TermsEnum, but
   // randomly sometimes uses a DocsAndFreqsEnum, DocsAndPositionsEnum.
-  public static DocsEnum docs(Random random, TermsEnum termsEnum, Bits liveDocs, DocsEnum reuse, int flags) throws IOException {
+  public static PostingsEnum docs(Random random, TermsEnum termsEnum, Bits liveDocs, PostingsEnum reuse, int flags) throws IOException {
     if (random.nextBoolean()) {
       if (random.nextBoolean()) {
         final int posFlags;
         switch (random.nextInt(4)) {
-          case 0: posFlags = 0; break;
-          case 1: posFlags = DocsAndPositionsEnum.FLAG_OFFSETS; break;
-          case 2: posFlags = DocsAndPositionsEnum.FLAG_PAYLOADS; break;
-          default: posFlags = DocsAndPositionsEnum.FLAG_OFFSETS | DocsAndPositionsEnum.FLAG_PAYLOADS; break;
+          case 0: posFlags = PostingsEnum.POSITIONS; break;
+          case 1: posFlags = PostingsEnum.OFFSETS; break;
+          case 2: posFlags = PostingsEnum.PAYLOADS; break;
+          default: posFlags = PostingsEnum.ALL; break;
         }
-        // TODO: cast to DocsAndPositionsEnum?
-        DocsAndPositionsEnum docsAndPositions = termsEnum.docsAndPositions(liveDocs, null, posFlags);
+        PostingsEnum docsAndPositions = termsEnum.postings(liveDocs, null, posFlags);
         if (docsAndPositions != null) {
           return docsAndPositions;
         }
       }
-      flags |= DocsEnum.FLAG_FREQS;
+      flags |= PostingsEnum.FREQS;
     }
-    return termsEnum.docs(liveDocs, reuse, flags);
+    return termsEnum.postings(liveDocs, reuse, flags);
   }
   
   public static CharSequence stringToCharSequence(String string, Random random) {
@@ -1207,34 +1204,16 @@ public final class TestUtil {
       return sb.toString();
     }
   }
-
-  /** Returns true if this is an FSDirectory backed by {@link WindowsFS}. */
-  public static boolean isWindowsFS(Directory dir) {
-    // First unwrap directory to see if there is an FSDir:
-    while (true) {
-      if (dir instanceof FSDirectory) {
-        return isWindowsFS(((FSDirectory) dir).getDirectory());
-      } else if (dir instanceof FilterDirectory) {
-        dir = ((FilterDirectory) dir).getDelegate();
-      } else {
-        return false;
+  
+  /** Returns a copy of directory, entirely in RAM */
+  public static RAMDirectory ramCopyOf(Directory dir) throws IOException {
+    RAMDirectory ram = new RAMDirectory();
+    for (String file : dir.listAll()) {
+      if (file.startsWith(IndexFileNames.SEGMENTS) || IndexFileNames.CODEC_FILE_PATTERN.matcher(file).matches()) {
+        ram.copyFrom(dir, file, file, IOContext.DEFAULT);
       }
     }
-  }
-
-  /** Returns true if this Path is backed by {@link WindowsFS}. */
-  public static boolean isWindowsFS(Path path) {
-    FileSystem fs = path.getFileSystem();
-    while (true) {
-      if (fs instanceof FilterFileSystem) {
-        if (((FilterFileSystem) fs).getParent() instanceof WindowsFS) {
-          return true;
-        }
-        fs = ((FilterFileSystem) fs).getDelegate();
-      } else {
-        return false;
-      }
-    }
+    return ram;
   }
   
   /** List of characters that match {@link Character#isWhitespace} */

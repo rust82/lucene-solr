@@ -17,23 +17,34 @@
 
 package org.apache.solr.search;
 
-import org.apache.lucene.index.LeafReaderContext;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 import org.apache.lucene.index.DocValues;
 import org.apache.lucene.index.IndexReaderContext;
+import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.NumericDocValues;
 import org.apache.lucene.index.ReaderUtil;
 import org.apache.lucene.search.FieldComparator;
+import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.LeafCollector;
 import org.apache.lucene.search.LeafFieldComparator;
+import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreDoc;
+import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TopDocsCollector;
-import org.apache.lucene.search.Query;
 import org.apache.lucene.search.Weight;
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.Scorer;
 import org.apache.lucene.util.InPlaceMergeSorter;
 import org.apache.lucene.util.PriorityQueue;
 import org.apache.solr.client.solrj.SolrServerException;
@@ -48,23 +59,12 @@ import org.apache.solr.handler.component.ResponseBuilder;
 import org.apache.solr.handler.component.ShardDoc;
 import org.apache.solr.handler.component.ShardRequest;
 import org.apache.solr.handler.component.ShardResponse;
+import org.apache.solr.request.SolrQueryRequest;
 import org.apache.solr.response.SolrQueryResponse;
 import org.apache.solr.schema.FieldType;
 import org.apache.solr.schema.IndexSchema;
 import org.apache.solr.schema.SchemaField;
-import org.apache.solr.request.SolrQueryRequest;
 import org.junit.Ignore;
-
-import java.io.IOException;
-import java.io.PrintWriter;
-import java.io.StringWriter;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 
 
 @Ignore
@@ -113,8 +113,8 @@ public class TestRankQueryPlugin extends QParserPlugin {
       return false;
     }
 
-    public Weight createWeight(IndexSearcher indexSearcher ) throws IOException{
-      return q.createWeight(indexSearcher);
+    public Weight createWeight(IndexSearcher indexSearcher, boolean needsScores) throws IOException{
+      return q.createWeight(indexSearcher, needsScores);
     }
 
     public void setBoost(float boost) {
@@ -125,10 +125,7 @@ public class TestRankQueryPlugin extends QParserPlugin {
       return q.getBoost();
     }
 
-    public String toString() {
-      return q.toString();
-    }
-
+    @Override
     public String toString(String field) {
       return q.toString(field);
     }
@@ -453,56 +450,57 @@ public class TestRankQueryPlugin extends QParserPlugin {
       }
     }
 
-   private class FakeScorer extends Scorer {
-        final int docid;
-        final float score;
+    private class FakeScorer extends Scorer {
 
-        FakeScorer(int docid, float score) {
-          super(null);
-          this.docid = docid;
-          this.score = score;
-        }
+      final int docid;
+      final float score;
 
-        @Override
-        public int docID() {
-          return docid;
-        }
-
-        @Override
-        public float score() throws IOException {
-          return score;
-        }
-
-        @Override
-        public int freq() throws IOException {
-          throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public int nextDoc() throws IOException {
-          throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public int advance(int target) throws IOException {
-          throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public long cost() {
-          return 1;
-        }
-
-        @Override
-        public Weight getWeight() {
-          throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public Collection<ChildScorer> getChildren() {
-          throw new UnsupportedOperationException();
-        }
+      FakeScorer(int docid, float score) {
+        super(null);
+        this.docid = docid;
+        this.score = score;
       }
+
+      @Override
+      public int docID() {
+        return docid;
+      }
+
+      @Override
+      public float score() throws IOException {
+        return score;
+      }
+
+      @Override
+      public int freq() throws IOException {
+        throw new UnsupportedOperationException();
+      }
+
+      @Override
+      public int nextDoc() throws IOException {
+        throw new UnsupportedOperationException();
+      }
+
+      @Override
+      public int advance(int target) throws IOException {
+        throw new UnsupportedOperationException();
+      }
+
+      @Override
+      public long cost() {
+        return 1;
+      }
+
+      @Override
+      public Weight getWeight() {
+        throw new UnsupportedOperationException();
+      }
+
+      @Override
+      public Collection<ChildScorer> getChildren() {
+        throw new UnsupportedOperationException();
+      }
+    }
 
     public void merge(ResponseBuilder rb, ShardRequest sreq) {
 
@@ -760,6 +758,11 @@ public class TestRankQueryPlugin extends QParserPlugin {
     public int getTotalHits() {
       return list.size();
     }
+    
+    @Override
+    public boolean needsScores() {
+      return true;
+    }
   }
 
   class TestCollector1 extends TopDocsCollector {
@@ -816,6 +819,11 @@ public class TestRankQueryPlugin extends QParserPlugin {
 
     public int getTotalHits() {
       return list.size();
+    }
+    
+    @Override
+    public boolean needsScores() {
+      return true;
     }
   }
 

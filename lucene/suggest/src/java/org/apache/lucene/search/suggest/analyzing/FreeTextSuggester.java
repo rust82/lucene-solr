@@ -110,7 +110,8 @@ import org.apache.lucene.util.fst.Util.TopResults;
  *
  * @lucene.experimental
  */
-public class FreeTextSuggester extends Lookup {
+// redundant 'implements Accountable' to workaround javadocs bugs
+public class FreeTextSuggester extends Lookup implements Accountable {
 
   /** Codec name used in the header for the saved model. */
   public final static String CODEC_NAME = "freetextsuggest";
@@ -468,6 +469,9 @@ public class FreeTextSuggester extends Lookup {
   public List<LookupResult> lookup(final CharSequence key, Set<BytesRef> contexts, int num) throws IOException {
     if (contexts != null) {
       throw new IllegalArgumentException("this suggester doesn't support contexts");
+    }
+    if (fst == null) {
+      throw new IllegalStateException("Lookup not supported at this time");
     }
 
     try (TokenStream ts = queryAnalyzer.tokenStream("", key.toString())) {

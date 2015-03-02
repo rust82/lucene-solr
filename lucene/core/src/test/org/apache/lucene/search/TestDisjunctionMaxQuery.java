@@ -17,21 +17,25 @@ package org.apache.lucene.search;
  * limitations under the License.
  */
 
-import org.apache.lucene.document.Field;
-import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.util.LuceneTestCase;
+import java.io.IOException;
+import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
+import java.util.Locale;
+
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.MockAnalyzer;
 import org.apache.lucene.document.Document;
+import org.apache.lucene.document.Field;
 import org.apache.lucene.document.FieldType;
 import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.DirectoryReader;
+import org.apache.lucene.index.FieldInvertState;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
-import org.apache.lucene.index.SlowCompositeReaderWrapper;
-import org.apache.lucene.index.FieldInvertState;
+import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.RandomIndexWriter;
+import org.apache.lucene.index.SlowCompositeReaderWrapper;
 import org.apache.lucene.index.StoredDocument;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.similarities.DefaultSimilarity;
@@ -39,11 +43,7 @@ import org.apache.lucene.search.similarities.Similarity;
 import org.apache.lucene.search.spans.SpanQuery;
 import org.apache.lucene.search.spans.SpanTermQuery;
 import org.apache.lucene.store.Directory;
-
-import java.text.DecimalFormat;
-import java.text.DecimalFormatSymbols;
-import java.util.Locale;
-import java.io.IOException;
+import org.apache.lucene.util.LuceneTestCase;
 
 /**
  * Test of the DisjunctionMaxQuery.
@@ -178,7 +178,7 @@ public class TestDisjunctionMaxQuery extends LuceneTestCase {
     
     QueryUtils.check(random(), dq, s);
     assertTrue(s.getTopReaderContext() instanceof LeafReaderContext);
-    final Weight dw = s.createNormalizedWeight(dq);
+    final Weight dw = s.createNormalizedWeight(dq, true);
     LeafReaderContext context = (LeafReaderContext)s.getTopReaderContext();
     final Scorer ds = dw.scorer(context, context.reader().getLiveDocs());
     final boolean skipOk = ds.advance(3) != DocIdSetIterator.NO_MORE_DOCS;
@@ -194,7 +194,7 @@ public class TestDisjunctionMaxQuery extends LuceneTestCase {
     dq.add(tq("dek", "DOES_NOT_EXIST"));
     assertTrue(s.getTopReaderContext() instanceof LeafReaderContext);
     QueryUtils.check(random(), dq, s);
-    final Weight dw = s.createNormalizedWeight(dq);
+    final Weight dw = s.createNormalizedWeight(dq, true);
     LeafReaderContext context = (LeafReaderContext)s.getTopReaderContext();
     final Scorer ds = dw.scorer(context, context.reader().getLiveDocs());
     assertTrue("firsttime skipTo found no match",
@@ -209,7 +209,7 @@ public class TestDisjunctionMaxQuery extends LuceneTestCase {
     q.add(tq("hed", "elephant"));
     QueryUtils.check(random(), q, s);
     
-    ScoreDoc[] h = s.search(q, null, 1000).scoreDocs;
+    ScoreDoc[] h = s.search(q, 1000).scoreDocs;
     
     try {
       assertEquals("all docs should match " + q.toString(), 4, h.length);
@@ -233,7 +233,7 @@ public class TestDisjunctionMaxQuery extends LuceneTestCase {
     q.add(tq("dek", "elephant"));
     QueryUtils.check(random(), q, s);
     
-    ScoreDoc[] h = s.search(q, null, 1000).scoreDocs;
+    ScoreDoc[] h = s.search(q, 1000).scoreDocs;
     
     try {
       assertEquals("3 docs should match " + q.toString(), 3, h.length);
@@ -258,7 +258,7 @@ public class TestDisjunctionMaxQuery extends LuceneTestCase {
     q.add(tq("dek", "elephant"));
     QueryUtils.check(random(), q, s);
     
-    ScoreDoc[] h = s.search(q, null, 1000).scoreDocs;
+    ScoreDoc[] h = s.search(q, 1000).scoreDocs;
     
     try {
       assertEquals("all docs should match " + q.toString(), 4, h.length);
@@ -281,7 +281,7 @@ public class TestDisjunctionMaxQuery extends LuceneTestCase {
     q.add(tq("dek", "elephant"));
     QueryUtils.check(random(), q, s);
     
-    ScoreDoc[] h = s.search(q, null, 1000).scoreDocs;
+    ScoreDoc[] h = s.search(q, 1000).scoreDocs;
     
     try {
       assertEquals("3 docs should match " + q.toString(), 3, h.length);
@@ -320,7 +320,7 @@ public class TestDisjunctionMaxQuery extends LuceneTestCase {
     
     QueryUtils.check(random(), q, s);
     
-    ScoreDoc[] h = s.search(q, null, 1000).scoreDocs;
+    ScoreDoc[] h = s.search(q, 1000).scoreDocs;
     
     try {
       assertEquals("3 docs should match " + q.toString(), 3, h.length);
@@ -352,7 +352,7 @@ public class TestDisjunctionMaxQuery extends LuceneTestCase {
     }
     QueryUtils.check(random(), q, s);
     
-    ScoreDoc[] h = s.search(q, null, 1000).scoreDocs;
+    ScoreDoc[] h = s.search(q, 1000).scoreDocs;
     
     try {
       assertEquals("4 docs should match " + q.toString(), 4, h.length);
@@ -388,7 +388,7 @@ public class TestDisjunctionMaxQuery extends LuceneTestCase {
     }
     QueryUtils.check(random(), q, s);
     
-    ScoreDoc[] h = s.search(q, null, 1000).scoreDocs;
+    ScoreDoc[] h = s.search(q, 1000).scoreDocs;
     
     try {
       
@@ -442,7 +442,7 @@ public class TestDisjunctionMaxQuery extends LuceneTestCase {
     }
     QueryUtils.check(random(), q, s);
     
-    ScoreDoc[] h = s.search(q, null, 1000).scoreDocs;
+    ScoreDoc[] h = s.search(q, 1000).scoreDocs;
     
     try {
       

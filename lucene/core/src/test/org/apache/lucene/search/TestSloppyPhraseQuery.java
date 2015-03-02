@@ -17,9 +17,6 @@ package org.apache.lucene.search;
  * limitations under the License.
  */
 
-import java.io.IOException;
-
-import org.apache.lucene.util.LuceneTestCase;
 import org.apache.lucene.analysis.MockAnalyzer;
 import org.apache.lucene.analysis.MockTokenizer;
 import org.apache.lucene.document.Document;
@@ -32,6 +29,9 @@ import org.apache.lucene.index.Term;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.MockDirectoryWrapper;
 import org.apache.lucene.store.RAMDirectory;
+import org.apache.lucene.util.LuceneTestCase;
+
+import java.io.IOException;
 
 public class TestSloppyPhraseQuery extends LuceneTestCase {
 
@@ -191,6 +191,11 @@ public class TestSloppyPhraseQuery extends LuceneTestCase {
       totalHits++;
       max = Math.max(max, scorer.freq());
     }
+    
+    @Override
+    public boolean needsScores() {
+      return true;
+    }
   }
   
   /** checks that no scores or freqs are infinite */
@@ -207,6 +212,11 @@ public class TestSloppyPhraseQuery extends LuceneTestCase {
       public void collect(int doc) throws IOException {
         assertFalse(Float.isInfinite(scorer.freq()));
         assertFalse(Float.isInfinite(scorer.score()));
+      }
+      
+      @Override
+      public boolean needsScores() {
+        return true;
       }
     });
     QueryUtils.check(random(), pq, searcher);
@@ -238,7 +248,7 @@ public class TestSloppyPhraseQuery extends LuceneTestCase {
     pq.add(new Term("lyrics", "drug"), 1);
     pq.add(new Term("lyrics", "drug"), 4);
     pq.setSlop(0);
-    assertEquals(0, is.search(pq, 4).totalHits);
+    assertEquals(1, is.search(pq, 4).totalHits);
     pq.setSlop(1);
     assertEquals(3, is.search(pq, 4).totalHits);
     pq.setSlop(2);

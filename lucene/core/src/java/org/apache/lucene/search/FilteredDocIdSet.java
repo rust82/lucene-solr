@@ -29,8 +29,7 @@ import org.apache.lucene.util.RamUsageEstimator;
  * that provides on-demand filtering/validation
  * mechanism on a given DocIdSet.
  *
- * <p/>
- *
+ * <p>
  * Technically, this same functionality could be achieved
  * with ChainedFilter (under queries/), however the
  * benefit of this class is it never materializes the full
@@ -57,12 +56,6 @@ public abstract class FilteredDocIdSet extends DocIdSet {
   /** Return the wrapped {@link DocIdSet}. */
   public DocIdSet getDelegate() {
     return _innerSet;
-  }
-
-  /** This DocIdSet implementation is cacheable if the inner set is cacheable. */
-  @Override
-  public boolean isCacheable() {
-    return _innerSet.isCacheable();
   }
 
   @Override

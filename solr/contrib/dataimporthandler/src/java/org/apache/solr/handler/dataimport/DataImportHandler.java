@@ -57,13 +57,12 @@ import org.xml.sax.InputSource;
  * <p>
  * It is configured in solrconfig.xml
  * </p>
- * <p/>
  * <p>
  * Refer to <a
  * href="http://wiki.apache.org/solr/DataImportHandler">http://wiki.apache.org/solr/DataImportHandler</a>
  * for more details.
  * </p>
- * <p/>
+ * <p>
  * <b>This API is experimental and subject to change</b>
  *
  * @since solr 1.3
@@ -96,19 +95,12 @@ public class DataImportHandler extends RequestHandlerBase implements
   @SuppressWarnings("unchecked")
   public void inform(SolrCore core) {
     try {
-      //hack to get the name of this handler
-      for (Map.Entry<String, SolrRequestHandler> e : core.getRequestHandlers().entrySet()) {
-        SolrRequestHandler handler = e.getValue();
-        //this will not work if startup=lazy is set
-        if( this == handler) {
-          String name= e.getKey();
-          if(name.startsWith("/")){
-            myName = name.substring(1);
-          }
-          // some users may have '/' in the handler name. replace with '_'
-          myName = myName.replaceAll("/","_") ;
-        }
+      String name = getPluginInfo().name;
+      if (name.startsWith("/")) {
+        myName = name.substring(1);
       }
+      // some users may have '/' in the handler name. replace with '_'
+      myName = myName.replaceAll("/", "_");
       debugEnabled = StrUtils.parseBool((String)initArgs.get(ENABLE_DEBUG), true);
       importer = new DataImporter(core, myName);         
     } catch (Exception e) {

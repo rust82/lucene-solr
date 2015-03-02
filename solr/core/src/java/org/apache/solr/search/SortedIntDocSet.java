@@ -762,11 +762,6 @@ public class SortedIntDocSet extends DocSetBase {
           }
 
           @Override
-          public boolean isCacheable() {
-            return true;
-          }
-
-          @Override
           public long ramBytesUsed() {
             return RamUsageEstimator.sizeOf(docs);
           }
@@ -778,6 +773,10 @@ public class SortedIntDocSet extends DocSetBase {
           }
 
         }, acceptDocs2);
+      }
+      @Override
+      public String toString(String field) {
+        return "SortedIntDocSetTopFilter";
       }
     };
   }

@@ -23,7 +23,6 @@ import java.util.Set;
 
 import org.apache.lucene.util.BitUtil;
 import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.UnicodeUtil;
 
 /**
  * Abstract base class for performing write operations of Lucene's low-level
@@ -92,10 +91,6 @@ public abstract class DataOutput {
    * byte, values from 128 to 16,383 may be stored in two bytes, and so on.</p>
    * <p>VByte Encoding Example</p>
    * <table cellspacing="0" cellpadding="2" border="0" summary="variable length encoding examples">
-   * <col width="64*">
-   * <col width="64*">
-   * <col width="64*">
-   * <col width="64*">
    * <tr valign="top">
    *   <th align="left">Value</th>
    *   <th align="left">Byte 1</th>
@@ -104,19 +99,19 @@ public abstract class DataOutput {
    * </tr>
    * <tr valign="bottom">
    *   <td>0</td>
-   *   <td><kbd>00000000</kbd></td>
+   *   <td><code>00000000</code></td>
    *   <td></td>
    *   <td></td>
    * </tr>
    * <tr valign="bottom">
    *   <td>1</td>
-   *   <td><kbd>00000001</kbd></td>
+   *   <td><code>00000001</code></td>
    *   <td></td>
    *   <td></td>
    * </tr>
    * <tr valign="bottom">
    *   <td>2</td>
-   *   <td><kbd>00000010</kbd></td>
+   *   <td><code>00000010</code></td>
    *   <td></td>
    *   <td></td>
    * </tr>
@@ -128,26 +123,26 @@ public abstract class DataOutput {
    * </tr>
    * <tr valign="bottom">
    *   <td>127</td>
-   *   <td><kbd>01111111</kbd></td>
+   *   <td><code>01111111</code></td>
    *   <td></td>
    *   <td></td>
    * </tr>
    * <tr valign="bottom">
    *   <td>128</td>
-   *   <td><kbd>10000000</kbd></td>
-   *   <td><kbd>00000001</kbd></td>
+   *   <td><code>10000000</code></td>
+   *   <td><code>00000001</code></td>
    *   <td></td>
    * </tr>
    * <tr valign="bottom">
    *   <td>129</td>
-   *   <td><kbd>10000001</kbd></td>
-   *   <td><kbd>00000001</kbd></td>
+   *   <td><code>10000001</code></td>
+   *   <td><code>00000001</code></td>
    *   <td></td>
    * </tr>
    * <tr valign="bottom">
    *   <td>130</td>
-   *   <td><kbd>10000010</kbd></td>
-   *   <td><kbd>00000001</kbd></td>
+   *   <td><code>10000010</code></td>
+   *   <td><code>00000001</code></td>
    *   <td></td>
    * </tr>
    * <tr>
@@ -158,21 +153,21 @@ public abstract class DataOutput {
    * </tr>
    * <tr valign="bottom">
    *   <td>16,383</td>
-   *   <td><kbd>11111111</kbd></td>
-   *   <td><kbd>01111111</kbd></td>
+   *   <td><code>11111111</code></td>
+   *   <td><code>01111111</code></td>
    *   <td></td>
    * </tr>
    * <tr valign="bottom">
    *   <td>16,384</td>
-   *   <td><kbd>10000000</kbd></td>
-   *   <td><kbd>10000000</kbd></td>
-   *   <td><kbd>00000001</kbd></td>
+   *   <td><code>10000000</code></td>
+   *   <td><code>10000000</code></td>
+   *   <td><code>00000001</code></td>
    * </tr>
    * <tr valign="bottom">
    *   <td>16,385</td>
-   *   <td><kbd>10000001</kbd></td>
-   *   <td><kbd>10000000</kbd></td>
-   *   <td><kbd>00000001</kbd></td>
+   *   <td><code>10000001</code></td>
+   *   <td><code>10000000</code></td>
+   *   <td><code>00000001</code></td>
    * </tr>
    * <tr>
    *   <td valign="top">...</td>
@@ -291,7 +286,9 @@ public abstract class DataOutput {
    * {@link #writeString(String) String}s.
    * 
    * @param map Input map. May be null (equivalent to an empty map)
+   * @deprecated Use {@link #writeMapOfStrings(Map)} instead.
    */
+  @Deprecated
   public void writeStringStringMap(Map<String,String> map) throws IOException {
     if (map == null) {
       writeInt(0);
@@ -303,6 +300,24 @@ public abstract class DataOutput {
       }
     }
   }
+  
+  /**
+   * Writes a String map.
+   * <p>
+   * First the size is written as an {@link #writeVInt(int) vInt},
+   * followed by each key-value pair written as two consecutive 
+   * {@link #writeString(String) String}s.
+   * 
+   * @param map Input map.
+   * @throws NullPointerException if {@code map} is null.
+   */
+  public void writeMapOfStrings(Map<String,String> map) throws IOException {
+    writeVInt(map.size());
+    for (Map.Entry<String, String> entry : map.entrySet()) {
+      writeString(entry.getKey());
+      writeString(entry.getValue());
+    }
+  }
 
   /**
    * Writes a String set.
@@ -312,7 +327,9 @@ public abstract class DataOutput {
    * {@link #writeString(String) String}.
    * 
    * @param set Input set. May be null (equivalent to an empty set)
+   * @deprecated Use {@link #writeMapOfStrings(Map)} instead.
    */
+  @Deprecated
   public void writeStringSet(Set<String> set) throws IOException {
     if (set == null) {
       writeInt(0);
@@ -321,6 +338,23 @@ public abstract class DataOutput {
       for(String value : set) {
         writeString(value);
       }
+    }
+  }
+  
+  /**
+   * Writes a String set.
+   * <p>
+   * First the size is written as an {@link #writeVInt(int) vInt},
+   * followed by each value written as a
+   * {@link #writeString(String) String}.
+   * 
+   * @param set Input set.
+   * @throws NullPointerException if {@code set} is null.
+   */
+  public void writeSetOfStrings(Set<String> set) throws IOException {
+    writeVInt(set.size());
+    for (String value : set) {
+      writeString(value);
     }
   }
 }

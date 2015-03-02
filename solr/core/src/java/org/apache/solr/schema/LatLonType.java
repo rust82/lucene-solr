@@ -318,16 +318,12 @@ class SpatialDistanceQuery extends ExtendedQueryBase implements PostFilter {
     protected Map lonContext;
 
     public SpatialWeight(IndexSearcher searcher) throws IOException {
+      super(SpatialDistanceQuery.this);
       this.searcher = searcher;
       this.latContext = ValueSource.newContext(searcher);
       this.lonContext = ValueSource.newContext(searcher);
       latSource.createWeight(latContext, searcher);
       lonSource.createWeight(lonContext, searcher);
-    }
-
-    @Override
-    public Query getQuery() {
-      return SpatialDistanceQuery.this;
     }
 
     @Override
@@ -508,6 +504,7 @@ class SpatialDistanceQuery extends ExtendedQueryBase implements PostFilter {
       result.addDetail(new Explanation(weight.queryNorm,"queryNorm"));
       return result;
     }
+
   }
 
   @Override
@@ -545,7 +542,7 @@ class SpatialDistanceQuery extends ExtendedQueryBase implements PostFilter {
 
 
   @Override
-  public Weight createWeight(IndexSearcher searcher) throws IOException {
+  public Weight createWeight(IndexSearcher searcher, boolean needsScores) throws IOException {
     // if we were supposed to use bboxQuery, then we should have been rewritten using that query
     assert bboxQuery == null;
     return new SpatialWeight(searcher);

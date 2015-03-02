@@ -57,6 +57,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.net.ConnectException;
 import java.net.SocketException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -73,7 +74,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeoutException;
 
 /**
  * SolrJ client class to communicate with SolrCloud.
@@ -171,11 +171,11 @@ public class CloudSolrClient extends SolrClient {
    *          that starts with a forward slash. Using a chroot allows multiple
    *          applications to coexist in one ensemble. For full details, see the
    *          Zookeeper documentation. Some examples:
-   *          <p/>
+   *          <p>
    *          "host1:2181"
-   *          <p/>
+   *          <p>
    *          "host1:2181,host2:2181,host3:2181/mysolrchroot"
-   *          <p/>
+   *          <p>
    *          "zoo1.example.com:2181,zoo2.example.com:2181,zoo3.example.com:2181"
    */
   public CloudSolrClient(String zkHost) {
@@ -203,11 +203,11 @@ public class CloudSolrClient extends SolrClient {
    *          that starts with a forward slash. Using a chroot allows multiple
    *          applications to coexist in one ensemble. For full details, see the
    *          Zookeeper documentation. Some examples:
-   *          <p/>
+   *          <p>
    *          "host1:2181"
-   *          <p/>
+   *          <p>
    *          "host1:2181,host2:2181,host3:2181/mysolrchroot"
-   *          <p/>
+   *          <p>
    *          "zoo1.example.com:2181,zoo2.example.com:2181,zoo3.example.com:2181"
    * @param httpClient
    *          the {@link HttpClient} instance to be used for all requests. The
@@ -451,19 +451,16 @@ public class CloudSolrClient extends SolrClient {
         if (zkStateReader == null) {
           ZkStateReader zk = null;
           try {
-            zk = new ZkStateReader(zkHost, zkClientTimeout,
-                zkConnectTimeout);
+            zk = new ZkStateReader(zkHost, zkClientTimeout, zkConnectTimeout);
             zk.createClusterStateWatchersAndUpdate();
             zkStateReader = zk;
           } catch (InterruptedException e) {
-            if (zk != null) zk.close();
+            zk.close();
             Thread.currentThread().interrupt();
-            throw new ZooKeeperException(SolrException.ErrorCode.SERVER_ERROR,
-                "", e);
-          } catch (KeeperException | TimeoutException | IOException e) {
-            if (zk != null) zk.close();
-            throw new ZooKeeperException(SolrException.ErrorCode.SERVER_ERROR,
-                "", e);
+            throw new ZooKeeperException(SolrException.ErrorCode.SERVER_ERROR, "", e);
+          } catch (KeeperException e) {
+            zk.close();
+            throw new ZooKeeperException(SolrException.ErrorCode.SERVER_ERROR, "", e);
           } catch (Exception e) {
             if (zk != null) zk.close();
             // do not wrap because clients may be relying on the underlying exception being thrown
@@ -476,6 +473,31 @@ public class CloudSolrClient extends SolrClient {
 
   public void setParallelUpdates(boolean parallelUpdates) {
     this.parallelUpdates = parallelUpdates;
+  }
+
+  /**
+   * Upload a set of config files to Zookeeper and give it a name
+   *
+   * NOTE: You should only allow trusted users to upload configs.  If you
+   * are allowing client access to zookeeper, you should protect the
+   * /configs node against unauthorised write access.
+   *
+   * @param configPath {@link java.nio.file.Path} to the config files
+   * @param configName the name of the config
+   * @throws IOException if an IO error occurs
+   */
+  public void uploadConfig(Path configPath, String configName) throws IOException {
+    zkStateReader.getConfigManager().uploadConfigDir(configPath, configName);
+  }
+
+  /**
+   * Download a named config from Zookeeper to a location on the filesystem
+   * @param configName    the name of the config
+   * @param downloadPath  the path to write config files to
+   * @throws IOException  if an I/O exception occurs
+   */
+  public void downloadConfig(String configName, Path downloadPath) throws IOException {
+    zkStateReader.getConfigManager().downloadConfigDir(configName, downloadPath);
   }
 
   private NamedList<Object> directUpdate(AbstractUpdateRequest request, ClusterState clusterState) throws SolrServerException {
@@ -507,7 +529,7 @@ public class CloudSolrClient extends SolrClient {
       }
     }
 
-    DocCollection col = getDocCollection(clusterState, collection);
+    DocCollection col = getDocCollection(clusterState, collection,null);
 
     DocRouter router = col.getRouter();
     
@@ -752,7 +774,7 @@ public class CloudSolrClient extends SolrClient {
       StringBuilder stateVerParamBuilder = null;
       for (String requestedCollection : requestedCollectionNames) {
         // track the version of state we're using on the client side using the _stateVer_ param
-        DocCollection coll = getDocCollection(getZkStateReader().getClusterState(), requestedCollection);
+        DocCollection coll = getDocCollection(getZkStateReader().getClusterState(), requestedCollection,null);
         int collVer = coll.getZNodeVersion();
         if (coll.getStateFormat()>1) {
           if(requestedCollections == null) requestedCollections = new ArrayList<>(requestedCollectionNames.size());
@@ -785,6 +807,18 @@ public class CloudSolrClient extends SolrClient {
     NamedList<Object> resp = null;
     try {
       resp = sendRequest(request);
+      //to avoid an O(n) operation we always add STATE_VERSION to the last and try to read it from there
+      Object o = resp.get(STATE_VERSION, resp.size()-1);
+      if(o != null && o instanceof Map) {
+        //remove this because no one else needs this and tests would fail if they are comparing responses
+        resp.remove(resp.size()-1);
+        Map invalidStates = (Map) o;
+        for (Object invalidEntries : invalidStates.entrySet()) {
+          Map.Entry e = (Map.Entry) invalidEntries;
+          getDocCollection(getZkStateReader().getClusterState(),(String)e.getKey(), (Integer)e.getValue());
+        }
+
+      }
     } catch (Exception exc) {
 
       Throwable rootCause = SolrException.getRootCause(exc);
@@ -838,7 +872,7 @@ public class CloudSolrClient extends SolrClient {
           !requestedCollections.isEmpty() &&
           wasCommError) {
         for (DocCollection ext : requestedCollections) {
-          DocCollection latestStateFromZk = getDocCollection(zkStateReader.getClusterState(), ext.getName());
+          DocCollection latestStateFromZk = getDocCollection(zkStateReader.getClusterState(), ext.getName(),null);
           if (latestStateFromZk.getZNodeVersion() != ext.getZNodeVersion()) {
             // looks like we couldn't reach the server because the state was stale == retry
             stateWasStale = true;
@@ -927,7 +961,7 @@ public class CloudSolrClient extends SolrClient {
       // add it to the Map of slices.
       Map<String,Slice> slices = new HashMap<>();
       for (String collectionName : collectionNames) {
-        DocCollection col = getDocCollection(clusterState, collectionName);
+        DocCollection col = getDocCollection(clusterState, collectionName, null);
         Collection<Slice> routeSlices = col.getRouter().getSearchSlices(shardKeys, reqParams , col);
         ClientUtils.addSlices(slices, collectionName, routeSlices, true);
       }
@@ -1077,30 +1111,40 @@ public class CloudSolrClient extends SolrClient {
   }
 
 
-  protected DocCollection getDocCollection(ClusterState clusterState, String collection) throws SolrException {
-    if(collection == null) return null;
+  protected DocCollection getDocCollection(ClusterState clusterState, String collection, Integer expectedVersion) throws SolrException {
+    if (collection == null) return null;
     DocCollection col = getFromCache(collection);
-    if(col != null) return col;
+    if (col != null) {
+      if (expectedVersion == null) return col;
+      if (expectedVersion.intValue() == col.getZNodeVersion()) return col;
+    }
 
     ClusterState.CollectionRef ref = clusterState.getCollectionRef(collection);
-    if(ref == null){
+    if (ref == null) {
       //no such collection exists
       return null;
     }
-    if(!ref.isLazilyLoaded()) {
+    if (!ref.isLazilyLoaded()) {
       //it is readily available just return it
       return ref.get();
     }
     List locks = this.locks;
     final Object lock = locks.get(Math.abs(Hash.murmurhash3_x86_32(collection, 0, collection.length(), 0) % locks.size()));
-    synchronized (lock){
+    synchronized (lock) {
       //we have waited for sometime just check once again
       col = getFromCache(collection);
-      if(col !=null) return col;
-      col = ref.get();
+      if (col != null) {
+        if (expectedVersion == null) return col;
+        if (expectedVersion.intValue() == col.getZNodeVersion()) {
+          return col;
+        } else {
+          collectionStateCache.remove(collection);
+        }
+      }
+      col = ref.get();//this is a call to ZK
     }
-    if(col == null ) return  null;
-    if(col.getStateFormat() >1) collectionStateCache.put(collection, new ExpiringCachedDocCollection(col));
+    if (col == null) return null;
+    if (col.getStateFormat() > 1) collectionStateCache.put(collection, new ExpiringCachedDocCollection(col));
     return col;
   }
 

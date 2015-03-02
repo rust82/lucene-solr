@@ -78,7 +78,7 @@ public abstract class SolrQueryParserBase extends QueryBuilder {
   /** The default operator that parser uses to combine query terms */
   Operator operator = OR_OPERATOR;
 
-  MultiTermQuery.RewriteMethod multiTermRewriteMethod = MultiTermQuery.CONSTANT_SCORE_FILTER_REWRITE;
+  MultiTermQuery.RewriteMethod multiTermRewriteMethod = MultiTermQuery.CONSTANT_SCORE_REWRITE;
   boolean allowLeadingWildcard = true;
 
   String defaultField;
@@ -271,7 +271,7 @@ public abstract class SolrQueryParserBase extends QueryBuilder {
    * Sets the boolean operator of the QueryParser.
    * In default mode (<code>OR_OPERATOR</code>) terms without any modifiers
    * are considered optional: for example <code>capital of Hungary</code> is equal to
-   * <code>capital OR of OR Hungary</code>.<br/>
+   * <code>capital OR of OR Hungary</code>.<br>
    * In <code>AND_OPERATOR</code> mode terms are considered to be in conjunction: the
    * above mentioned query is parsed as <code>capital AND of AND Hungary</code>
    */
@@ -290,7 +290,7 @@ public abstract class SolrQueryParserBase extends QueryBuilder {
 
 
   /**
-   * By default QueryParser uses {@link org.apache.lucene.search.MultiTermQuery#CONSTANT_SCORE_FILTER_REWRITE}
+   * By default QueryParser uses {@link org.apache.lucene.search.MultiTermQuery#CONSTANT_SCORE_REWRITE}
    * when creating a PrefixQuery, WildcardQuery or RangeQuery. This implementation is generally preferable because it
    * a) Runs faster b) Does not have the scarcity of terms unduly influence score
    * c) avoids any "TooManyBooleanClauses" exception.

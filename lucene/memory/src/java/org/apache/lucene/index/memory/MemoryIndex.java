@@ -19,6 +19,7 @@ package org.apache.lucene.index.memory;
 
 import java.io.IOException;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.Map;
@@ -34,8 +35,7 @@ import org.apache.lucene.analysis.tokenattributes.PositionIncrementAttribute;
 import org.apache.lucene.analysis.tokenattributes.TermToBytesRefAttribute;
 import org.apache.lucene.index.BinaryDocValues;
 import org.apache.lucene.index.DocValuesType;
-import org.apache.lucene.index.DocsAndPositionsEnum;
-import org.apache.lucene.index.DocsEnum;
+import org.apache.lucene.index.PostingsEnum;
 import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.FieldInfos;
 import org.apache.lucene.index.FieldInvertState;
@@ -124,7 +124,7 @@ import org.apache.lucene.util.RecyclingIntBlockAllocator;
  * 
  * <p>
  * <b>Example Usage</b> 
- * <p>
+ * <br>
  * <pre class="prettyprint">
  * Analyzer analyzer = new SimpleAnalyzer(version);
  * MemoryIndex index = new MemoryIndex();
@@ -444,7 +444,7 @@ public class MemoryIndex {
         fieldInfo = new FieldInfo(fieldName, fields.size(), false, false, this.storePayloads,
             this.storeOffsets
                 ? IndexOptions.DOCS_AND_FREQS_AND_POSITIONS_AND_OFFSETS : IndexOptions.DOCS_AND_FREQS_AND_POSITIONS,
-            DocValuesType.NONE, -1, null);
+            DocValuesType.NONE, -1, Collections.emptyMap());
         sliceArray = new SliceByteStartArray(BytesRefHash.DEFAULT_CAPACITY);
         terms = new BytesRefHash(byteBlockPool, BytesRefHash.DEFAULT_CAPACITY, sliceArray);
       }
@@ -568,7 +568,11 @@ public class MemoryIndex {
         public void setScorer(Scorer scorer) {
           this.scorer = scorer;
         }
-
+        
+        @Override
+        public boolean needsScores() {
+          return true;
+        }
       });
       float score = scores[0];
       return score;
@@ -979,20 +983,12 @@ public class MemoryIndex {
       }
 
       @Override
-      public DocsEnum docs(Bits liveDocs, DocsEnum reuse, int flags) {
-        if (reuse == null || !(reuse instanceof MemoryDocsEnum)) {
-          reuse = new MemoryDocsEnum();
-        }
-        return ((MemoryDocsEnum) reuse).reset(liveDocs, info.sliceArray.freq[info.sortedTerms[termUpto]]);
-      }
-
-      @Override
-      public DocsAndPositionsEnum docsAndPositions(Bits liveDocs, DocsAndPositionsEnum reuse, int flags) {
-        if (reuse == null || !(reuse instanceof MemoryDocsAndPositionsEnum)) {
-          reuse = new MemoryDocsAndPositionsEnum();
+      public PostingsEnum postings(Bits liveDocs, PostingsEnum reuse, int flags) {
+        if (reuse == null || !(reuse instanceof MemoryPostingsEnum)) {
+          reuse = new MemoryPostingsEnum();
         }
         final int ord = info.sortedTerms[termUpto];
-        return ((MemoryDocsAndPositionsEnum) reuse).reset(liveDocs, info.sliceArray.start[ord], info.sliceArray.end[ord], info.sliceArray.freq[ord]);
+        return ((MemoryPostingsEnum) reuse).reset(liveDocs, info.sliceArray.start[ord], info.sliceArray.end[ord], info.sliceArray.freq[ord]);
       }
 
       @Override
@@ -1009,69 +1005,26 @@ public class MemoryIndex {
       }
     }
     
-    private class MemoryDocsEnum extends DocsEnum {
-      private boolean hasNext;
-      private Bits liveDocs;
-      private int doc = -1;
-      private int freq;
+    private class MemoryPostingsEnum extends PostingsEnum {
 
-      public DocsEnum reset(Bits liveDocs, int freq) {
-        this.liveDocs = liveDocs;
-        hasNext = true;
-        doc = -1;
-        this.freq = freq;
-        return this;
-      }
-
-      @Override
-      public int docID() {
-        return doc;
-      }
-
-      @Override
-      public int nextDoc() {
-        if (hasNext && (liveDocs == null || liveDocs.get(0))) {
-          hasNext = false;
-          return doc = 0;
-        } else {
-          return doc = NO_MORE_DOCS;
-        }
-      }
-
-      @Override
-      public int advance(int target) throws IOException {
-        return slowAdvance(target);
-      }
-
-      @Override
-      public int freq() throws IOException {
-        return freq;
-      }
-
-      @Override
-      public long cost() {
-        return 1;
-      }
-    }
-    
-    private class MemoryDocsAndPositionsEnum extends DocsAndPositionsEnum {
       private final SliceReader sliceReader;
       private int posUpto; // for assert
       private boolean hasNext;
       private Bits liveDocs;
       private int doc = -1;
       private int freq;
+      private int pos;
       private int startOffset;
       private int endOffset;
       private int payloadIndex;
       private final BytesRefBuilder payloadBuilder;//only non-null when storePayloads
 
-      public MemoryDocsAndPositionsEnum() {
+      public MemoryPostingsEnum() {
         this.sliceReader = new SliceReader(intBlockPool);
         this.payloadBuilder = storePayloads ? new BytesRefBuilder() : null;
       }
 
-      public DocsAndPositionsEnum reset(Bits liveDocs, int start, int end, int freq) {
+      public PostingsEnum reset(Bits liveDocs, int start, int end, int freq) {
         this.liveDocs = liveDocs;
         this.sliceReader.reset(start, end);
         posUpto = 0; // for assert
@@ -1089,6 +1042,7 @@ public class MemoryIndex {
 
       @Override
       public int nextDoc() {
+        pos = -1;
         if (hasNext && (liveDocs == null || liveDocs.get(0))) {
           hasNext = false;
           return doc = 0;
@@ -1109,10 +1063,12 @@ public class MemoryIndex {
 
       @Override
       public int nextPosition() {
-        assert posUpto++ < freq;
+        posUpto++;
+        assert posUpto <= freq;
         assert !sliceReader.endOfSlice() : " stores offsets : " + startOffset;
         int pos = sliceReader.readInt();
         if (storeOffsets) {
+          //pos = sliceReader.readInt();
           startOffset = sliceReader.readInt();
           endOffset = sliceReader.readInt();
         }

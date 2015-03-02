@@ -18,14 +18,15 @@ package org.apache.lucene.search;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import com.carrotsearch.randomizedtesting.generators.RandomInts;
 import org.apache.lucene.analysis.MockAnalyzer;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.TextField;
+import org.apache.lucene.index.PostingsEnum;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.RandomIndexWriter;
 import org.apache.lucene.index.Term;
@@ -33,8 +34,6 @@ import org.apache.lucene.store.Directory;
 import org.apache.lucene.util.FixedBitSet;
 import org.apache.lucene.util.LuceneTestCase;
 import org.apache.lucene.util.TestUtil;
-
-import com.carrotsearch.randomizedtesting.generators.RandomInts;
 
 public class TestBooleanOr extends LuceneTestCase {
 
@@ -53,7 +52,7 @@ public class TestBooleanOr extends LuceneTestCase {
 
   private int search(Query q) throws IOException {
     QueryUtils.check(random(), q,searcher);
-    return searcher.search(q, null, 1000).totalHits;
+    return searcher.search(q, 1000).totalHits;
   }
 
   public void testElements() throws IOException {
@@ -186,7 +185,7 @@ public class TestBooleanOr extends LuceneTestCase {
     bq.add(new TermQuery(new Term("field", "a")), BooleanClause.Occur.SHOULD);
     bq.add(new TermQuery(new Term("field", "a")), BooleanClause.Occur.SHOULD);
 
-    Weight w = s.createNormalizedWeight(bq);
+    Weight w = s.createNormalizedWeight(bq, true);
 
     assertEquals(1, s.getIndexReader().leaves().size());
     BulkScorer scorer = w.bulkScorer(s.getIndexReader().leaves().get(0), null);
@@ -199,6 +198,11 @@ public class TestBooleanOr extends LuceneTestCase {
         public void collect(int doc) {
           assertTrue("collected doc=" + doc + " beyond max=" + end, doc < end.intValue());
           hits.set(doc);
+        }
+        
+        @Override
+        public boolean needsScores() {
+          return false;
         }
       };
 

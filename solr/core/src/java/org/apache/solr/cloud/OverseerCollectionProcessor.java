@@ -44,6 +44,7 @@ import org.apache.solr.common.cloud.Replica;
 import org.apache.solr.common.cloud.RoutingRule;
 import org.apache.solr.common.cloud.Slice;
 import org.apache.solr.common.cloud.SolrZkClient;
+import org.apache.solr.common.cloud.ZkConfigManager;
 import org.apache.solr.common.cloud.ZkCoreNodeProps;
 import org.apache.solr.common.cloud.ZkNodeProps;
 import org.apache.solr.common.cloud.ZkStateReader;
@@ -580,6 +581,8 @@ public class OverseerCollectionProcessor implements Runnable, Closeable {
 
     NamedList results = new NamedList();
     try {
+      // force update the cluster state
+      zkStateReader.updateClusterState(true);
       CollectionParams.CollectionAction action = CollectionParams.CollectionAction.get(operation);
       if (action == null) {
         // back-compat because we used strings different than enum values before SOLR-6115
@@ -644,9 +647,6 @@ public class OverseerCollectionProcessor implements Runnable, Closeable {
             break;
           case OVERSEERSTATUS:
             getOverseerStatus(message, results);
-            break;
-          case LIST:
-            listCollections(zkStateReader.getClusterState(), results);
             break;
           case CLUSTERSTATUS:
             getClusterStatus(zkStateReader.getClusterState(), message, results);
@@ -1007,16 +1007,6 @@ public class OverseerCollectionProcessor implements Runnable, Closeable {
       }
       return collection;
     }
-  }
-
-  @SuppressWarnings("unchecked")
-  private void listCollections(ClusterState clusterState, NamedList results) {
-    Set<String> collections = clusterState.getCollections();
-    List<String> collectionList = new ArrayList<String>();
-    for (String collection : collections) {
-      collectionList.add(collection);
-    }
-    results.add("collections", collectionList);
   }
 
   @SuppressWarnings("unchecked")
@@ -2630,7 +2620,7 @@ public class OverseerCollectionProcessor implements Runnable, Closeable {
       // if there is only one conf, use that
       List<String> configNames = null;
       try {
-        configNames = zkStateReader.getZkClient().getChildren(ZkController.CONFIGS_ZKNODE, null, true);
+        configNames = zkStateReader.getZkClient().getChildren(ZkConfigManager.CONFIGS_ZKNODE, null, true);
         if (configNames != null && configNames.size() == 1) {
           configName = configNames.get(0);
           // no config set named, but there is only 1 - use it
@@ -2646,7 +2636,7 @@ public class OverseerCollectionProcessor implements Runnable, Closeable {
   }
   
   private boolean validateConfig(String configName) throws KeeperException, InterruptedException {
-    return zkStateReader.getZkClient().exists(ZkController.CONFIGS_ZKNODE + "/" + configName, true);
+    return zkStateReader.getZkClient().exists(ZkConfigManager.CONFIGS_ZKNODE + "/" + configName, true);
   }
 
   /**

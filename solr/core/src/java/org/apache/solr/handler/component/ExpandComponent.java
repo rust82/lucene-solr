@@ -21,21 +21,12 @@ import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Iterator;
-import java.util.Arrays;
 
-import com.carrotsearch.hppc.IntObjectOpenHashMap;
-import com.carrotsearch.hppc.LongOpenHashSet;
-import com.carrotsearch.hppc.LongObjectOpenHashMap;
-import com.carrotsearch.hppc.cursors.IntObjectCursor;
-import com.carrotsearch.hppc.cursors.LongCursor;
-import com.carrotsearch.hppc.cursors.LongObjectCursor;
-import com.carrotsearch.hppc.IntOpenHashSet;
-import com.carrotsearch.hppc.cursors.ObjectCursor;
-import com.carrotsearch.hppc.LongObjectMap;
 import org.apache.lucene.index.DocValues;
 import org.apache.lucene.index.DocValuesType;
 import org.apache.lucene.index.FieldInfo;
@@ -46,11 +37,13 @@ import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.MultiDocValues;
 import org.apache.lucene.index.NumericDocValues;
 import org.apache.lucene.index.SortedDocValues;
-import org.apache.lucene.queries.TermsFilter;
+import org.apache.lucene.queries.TermsQuery;
 import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.DocIdSetIterator;
+import org.apache.lucene.search.FilteredQuery;
 import org.apache.lucene.search.LeafCollector;
 import org.apache.lucene.search.Query;
+import org.apache.lucene.search.QueryWrapperFilter;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.Sort;
@@ -73,11 +66,11 @@ import org.apache.solr.core.PluginInfo;
 import org.apache.solr.core.SolrCore;
 import org.apache.solr.request.SolrQueryRequest;
 import org.apache.solr.schema.FieldType;
+import org.apache.solr.schema.StrField;
+import org.apache.solr.schema.TrieDoubleField;
 import org.apache.solr.schema.TrieFloatField;
 import org.apache.solr.schema.TrieIntField;
 import org.apache.solr.schema.TrieLongField;
-import org.apache.solr.schema.TrieDoubleField;
-import org.apache.solr.schema.StrField;
 import org.apache.solr.search.CollapsingQParserPlugin;
 import org.apache.solr.search.DocIterator;
 import org.apache.solr.search.DocList;
@@ -89,20 +82,30 @@ import org.apache.solr.search.SolrIndexSearcher;
 import org.apache.solr.util.plugin.PluginInfoInitialized;
 import org.apache.solr.util.plugin.SolrCoreAware;
 
+import com.carrotsearch.hppc.IntObjectOpenHashMap;
+import com.carrotsearch.hppc.IntOpenHashSet;
+import com.carrotsearch.hppc.LongObjectMap;
+import com.carrotsearch.hppc.LongObjectOpenHashMap;
+import com.carrotsearch.hppc.LongOpenHashSet;
+import com.carrotsearch.hppc.cursors.IntObjectCursor;
+import com.carrotsearch.hppc.cursors.LongCursor;
+import com.carrotsearch.hppc.cursors.LongObjectCursor;
+import com.carrotsearch.hppc.cursors.ObjectCursor;
+
 /**
  * The ExpandComponent is designed to work with the CollapsingPostFilter.
  * The CollapsingPostFilter collapses a result set on a field.
- * <p/>
+ * <p>
  * The ExpandComponent expands the collapsed groups for a single page.
- * <p/>
+ * <p>
  * http parameters:
- * <p/>
- * expand=true <br/>
- * expand.rows=5 <br/>
- * expand.sort=field asc|desc<br/>
- * expand.q=*:* (optional, overrides the main query)<br/>
- * expand.fq=type:child (optional, overrides the main filter queries)<br/>
- * expand.field=field (mandatory if the not used with the CollapsingQParserPlugin)<br/>
+ * <p>
+ * expand=true <br>
+ * expand.rows=5 <br>
+ * expand.sort=field asc|desc<br>
+ * expand.q=*:* (optional, overrides the main query)<br>
+ * expand.fq=type:child (optional, overrides the main filter queries)<br>
+ * expand.field=field (mandatory if the not used with the CollapsingQParserPlugin)<br>
  */
 public class ExpandComponent extends SearchComponent implements PluginInfoInitialized, SolrCoreAware {
   public static final String COMPONENT_NAME = "expand";
@@ -375,7 +378,11 @@ public class ExpandComponent extends SearchComponent implements PluginInfoInitia
       collector = groupExpandCollector;
     }
 
-    searcher.search(query, pfilter.filter, collector);
+    if (pfilter.filter == null) {
+      searcher.search(query, collector);
+    } else {
+      searcher.search(new FilteredQuery(query, pfilter.filter), collector);
+    }
     LongObjectMap groups = ((GroupCollector)groupExpandCollector).getGroups();
     Map<String, DocSlice> outMap = new HashMap<>();
     CharsRefBuilder charsRef = new CharsRefBuilder();
@@ -510,6 +517,11 @@ public class ExpandComponent extends SearchComponent implements PluginInfoInitia
       }
     }
 
+    @Override
+    public boolean needsScores() {
+      return true; // TODO: is this always true?
+    }
+
     public LeafCollector getLeafCollector(LeafReaderContext context) throws IOException {
       final int docBase = context.docBase;
 
@@ -581,6 +593,11 @@ public class ExpandComponent extends SearchComponent implements PluginInfoInitia
       this.field = field;
       this.collapsedSet = collapsedSet;
     }
+    
+    @Override
+    public boolean needsScores() {
+      return true; // TODO: is this always true?
+    }
 
     public LeafCollector getLeafCollector(LeafReaderContext context) throws IOException {
       final int docBase = context.docBase;
@@ -648,7 +665,7 @@ public class ExpandComponent extends SearchComponent implements PluginInfoInitia
       bytesRefs[++index] = term.toBytesRef();
     }
 
-    return new SolrConstantScoreQuery(new TermsFilter(fname, bytesRefs));
+    return new SolrConstantScoreQuery(new QueryWrapperFilter(new TermsQuery(fname, bytesRefs)));
   }
 
   private Query getGroupQuery(String fname,
@@ -662,7 +679,7 @@ public class ExpandComponent extends SearchComponent implements PluginInfoInitia
       IntObjectCursor<BytesRef> cursor = it.next();
       bytesRefs[++index] = cursor.value;
     }
-    return new SolrConstantScoreQuery(new TermsFilter(fname, bytesRefs));
+    return new SolrConstantScoreQuery(new QueryWrapperFilter(new TermsQuery(fname, bytesRefs)));
   }
 
 

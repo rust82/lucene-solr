@@ -17,10 +17,6 @@ package org.apache.lucene.search;
  * limitations under the License.
  */
 
-import static org.apache.lucene.search.ScorerPriorityQueue.leftNode;
-import static org.apache.lucene.search.ScorerPriorityQueue.parentNode;
-import static org.apache.lucene.search.ScorerPriorityQueue.rightNode;
-
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -29,6 +25,10 @@ import java.util.List;
 
 import org.apache.lucene.search.ScorerPriorityQueue.ScorerWrapper;
 import org.apache.lucene.util.PriorityQueue;
+
+import static org.apache.lucene.search.ScorerPriorityQueue.leftNode;
+import static org.apache.lucene.search.ScorerPriorityQueue.parentNode;
+import static org.apache.lucene.search.ScorerPriorityQueue.rightNode;
 
 /**
  * A {@link Scorer} for {@link BooleanQuery} when

@@ -18,7 +18,6 @@ package org.apache.solr.handler;
 
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
-import org.apache.lucene.util.IOUtils;
 import org.apache.lucene.util.LuceneTestCase.Slow;
 import org.apache.lucene.util.TestUtil;
 import org.apache.solr.BaseDistributedSearchTestCase;
@@ -134,8 +133,6 @@ public class TestReplicationHandler extends SolrTestCaseJ4 {
     super.tearDown();
     masterJetty.stop();
     slaveJetty.stop();
-    master.tearDown();
-    slave.tearDown();
     masterJetty = slaveJetty = null;
     master = slave = null;
     masterClient.close();
@@ -174,7 +171,7 @@ public class TestReplicationHandler extends SolrTestCaseJ4 {
     return s.add(doc).getStatus();
   }
 
-  NamedList query(String query, SolrClient s) throws SolrServerException {
+  NamedList query(String query, SolrClient s) throws SolrServerException, IOException {
     NamedList res = new SimpleOrderedMap();
     ModifiableSolrParams params = new ModifiableSolrParams();
 
@@ -343,9 +340,6 @@ public class TestReplicationHandler extends SolrTestCaseJ4 {
     } finally {
       try { 
         if (repeaterJetty != null) repeaterJetty.stop(); 
-      } catch (Exception e) { /* :NOOP: */ }
-      try { 
-        if (repeater != null) repeater.tearDown();
       } catch (Exception e) { /* :NOOP: */ }
       if (repeaterClient != null) repeaterClient.close();
     }
@@ -909,7 +903,6 @@ public class TestReplicationHandler extends SolrTestCaseJ4 {
     } finally {
       if (repeater != null) {
         repeaterJetty.stop();
-        repeater.tearDown();
         repeaterJetty = null;
       }
       if (repeaterClient != null) {
@@ -1503,10 +1496,6 @@ public class TestReplicationHandler extends SolrTestCaseJ4 {
       copyConfigFile(getSchemaFile(), "schema.xml");
       copyConfigFile(CONF_DIR + "solrconfig.snippet.randomindexconfig.xml", 
                      "solrconfig.snippet.randomindexconfig.xml");
-    }
-
-    public void tearDown() throws Exception {
-      IOUtils.rm(homeDir.toPath());
     }
 
     public void copyConfigFile(String srcFile, String destFile) 
